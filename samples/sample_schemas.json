@@ -1,0 +1,75 @@
+{
+  "spec_a": {
+    "name": "Marketplace API",
+    "version": "1.0.0",
+    "primary_url": "https://raw.githubusercontent.com/example/api/v1/openapi.json",
+    "fallback_url": "https://cdn.example.com/api/v1/openapi.json",
+    "schema": {
+      "openapi": "3.0.0",
+      "info": { "title": "Marketplace API", "version": "1.0.0" },
+      "paths": {
+        "/orders": {
+          "post": {
+            "summary": "Create order",
+            "requestBody": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "type": "object",
+                    "properties": {
+                      "order_id": { "type": "string" },
+                      "amount": { "type": "number" }
+                    },
+                    "required": ["order_id", "amount"]
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "spec_b": {
+    "name": "Marketplace API",
+    "version": "2.0.0",
+    "primary_url": "https://raw.githubusercontent.com/example/api/v2/openapi.json",
+    "fallback_url": "https://cdn.example.com/api/v2/openapi.json",
+    "schema": {
+      "openapi": "3.0.0",
+      "info": { "title": "Marketplace API", "version": "2.0.0" },
+      "paths": {
+        "/orders": {
+          "post": {
+            "summary": "Create order",
+            "requestBody": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "type": "object",
+                    "properties": {
+                      "order_id": { "type": "string" },
+                      "amount_cents": { "type": "integer" }
+                    },
+                    "required": ["order_id", "amount_cents"]
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "expected_evaluation_output": {
+    "status": "BREAKING_INCOMPATIBLE",
+    "breaking_change_count": 1,
+    "breaking_changes": [
+      "Removed parameter 'amount' and added required parameter 'amount_cents'"
+    ],
+    "normalized_summary": "BREAKING_INCOMPATIBLE: 1 breaking changes. Removed parameter 'amount' and added required parameter 'amount_cents'",
+    "source_a_truncated": false,
+    "source_b_truncated": false,
+    "validator_signature": "SPECS:1:2|STATUS:3|COUNT:1|SUMMARY:BREAKING_INCOMPATIBLE: 1 breaking changes. Removed parameter 'amount' and added required parameter 'amount_cents'|TRUNC_A:False|TRUNC_B:False"
+  }
+}
