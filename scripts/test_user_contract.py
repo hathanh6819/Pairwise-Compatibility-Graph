@@ -2,6 +2,8 @@ import time
 import genlayer_py
 import sys
 
+TARGET_CONTRACT = "0xD412ec7C0dEB52260E43590a2Cd88f06CCdCDb97"
+
 def safe_call(fn, *args, **kwargs):
     for attempt in range(10):
         try:
@@ -28,30 +30,31 @@ def custom_wait_receipt(client, tx_hash, max_timeout=180):
             print(f"Polling receipt notice: {e}")
     raise TimeoutError(f"Transaction {tx_hash} receipt timed out")
 
-def run_tests_on_contract(target_contract: str):
-    print(f"=== EXECUTING ON-CHAIN LIFECYCLE ON {target_contract} ===")
-    client = genlayer_py.create_client(chain=genlayer_py.studionet)
-
+def main():
+    target = sys.argv[1] if len(sys.argv) > 1 else TARGET_CONTRACT
+    print(f"=== EXECUTING SCHEMA COMPATIBILITY GRAPH LIFECYCLE ON {target} ===")
+    
     caller_account = genlayer_py.create_account()
+    client = genlayer_py.create_client(chain=genlayer_py.studionet, account=caller_account)
     print(f"Caller Account: {caller_account.address}")
     print("Funding caller account with 10 GEN...")
-    time.sleep(5)
+    time.sleep(4)
     safe_call(client.fund_account, caller_account.address, 10000000000000000000)
     print("Caller account funded successfully.")
 
     # 1. Register Spec A
-    print(f"\n[Step 1/3] Registering Spec A on {target_contract}...")
+    print(f"\n[Step 1/3] Registering Spec A on {target}...")
     time.sleep(5)
     tx1 = safe_call(
         client.write_contract,
-        address=target_contract,
+        address=target,
         function_name="register_spec",
         account=caller_account,
         args=[
             "AuthServiceAPI",
             "v1.0",
             "https://raw.githubusercontent.com/hathanh6819/Pairwise-Compatibility-Graph/main/samples/openapi-v1.json",
-            "https://raw.githubusercontent.com/hathanh6819/Pairwise-Compatibility-Graph/main/samples/openapi-v1.json"
+            "https://raw.github.com/hathanh6819/Pairwise-Compatibility-Graph/main/samples/openapi-v1.json"
         ]
     )
     print(f"register_spec A Tx Hash: {tx1}")
@@ -59,18 +62,18 @@ def run_tests_on_contract(target_contract: str):
     print(f"register_spec A Confirmed! Status: {r1.get('status')}")
 
     # 2. Register Spec B
-    print(f"\n[Step 2/3] Registering Spec B on {target_contract}...")
+    print(f"\n[Step 2/3] Registering Spec B on {target}...")
     time.sleep(5)
     tx2 = safe_call(
         client.write_contract,
-        address=target_contract,
+        address=target,
         function_name="register_spec",
         account=caller_account,
         args=[
             "AuthServiceAPI",
             "v1.1",
             "https://raw.githubusercontent.com/hathanh6819/Pairwise-Compatibility-Graph/main/samples/openapi-v1.1-compatible.json",
-            "https://raw.githubusercontent.com/hathanh6819/Pairwise-Compatibility-Graph/main/samples/openapi-v1.1-compatible.json"
+            "https://raw.github.com/hathanh6819/Pairwise-Compatibility-Graph/main/samples/openapi-v1.1-compatible.json"
         ]
     )
     print(f"register_spec B Tx Hash: {tx2}")
@@ -78,11 +81,11 @@ def run_tests_on_contract(target_contract: str):
     print(f"register_spec B Confirmed! Status: {r2.get('status')}")
 
     # 3. Evaluate Compatibility
-    print(f"\n[Step 3/3] Evaluating Compatibility between Spec 1 and Spec 2...")
+    print(f"\n[Step 3/3] Evaluating Compatibility between Spec 1 and Spec 2 on {target}...")
     time.sleep(5)
     tx3 = safe_call(
         client.write_contract,
-        address=target_contract,
+        address=target,
         function_name="evaluate_compatibility",
         account=caller_account,
         args=[1, 2]
@@ -91,13 +94,24 @@ def run_tests_on_contract(target_contract: str):
     r3 = custom_wait_receipt(client, tx3)
     print(f"evaluate_compatibility Confirmed! Status: {r3.get('status')}")
 
+    time.sleep(4)
+    spec1 = safe_call(client.read_contract, address=target, function_name="get_spec", args=[1])
+    spec2 = safe_call(client.read_contract, address=target, function_name="get_spec", args=[2])
+    edge = safe_call(client.read_contract, address=target, function_name="get_edge", args=[1, 2])
+    compat = safe_call(client.read_contract, address=target, function_name="check_compatibility", args=[1, 2])
+
     print("\n==========================================================================")
-    print(f">>> SUCCESS! ALL LIFECYCLE TRANSACTIONS EXECUTED ON {target_contract} <<<")
-    print(f"Explorer URL: https://explorer-studio.genlayer.com/address/{target_contract}")
+    print(f">>> Spec 1: {spec1.get('name')} {spec1.get('version')} <<<")
+    print(f">>> Spec 2: {spec2.get('name')} {spec2.get('version')} <<<")
+    print(f">>> Pairwise Edge (1 -> 2): Status Code = {edge.get('status_code')}, Breaking Changes = {edge.get('breaking_change_count')} <<<")
+    print(f">>> Normalized Summary: {edge.get('normalized_summary')} <<<")
+    print(f">>> Compatibility Result: {compat} <<<")
+    print(f">>> SUCCESS! ALL 3 LIFECYCLE TRANSACTIONS EXECUTED ON {target} <<<")
+    print(f"Explorer URL: https://explorer-studio.genlayer.com/address/{target}")
     print("==========================================================================")
+    
+    with open("evidence/deployed_address.txt", "w", encoding="utf-8") as f:
+        f.write(target + "\n")
 
 if __name__ == "__main__":
-    if len(sys.argv) > 1:
-        run_tests_on_contract(sys.argv[1])
-    else:
-        print("Usage: python scripts/test_user_contract.py <CONTRACT_ADDRESS>")
+    main()
