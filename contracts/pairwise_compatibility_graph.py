@@ -147,16 +147,12 @@ class Contract(gl.Contract):
             # Fail closed when either spec returns no usable content from all gateways
             if len(body_a) == 0 or len(body_b) == 0:
                 unavail_payload = {
-                    "raw_json": json.dumps({
-                        "status": "EVALUATION_FAILED",
-                        "breaking_change_count": 0,
-                        "breaking_changes": [],
-                        "normalized_summary": "EVALUATION_FAILED: Empty schema content from gateways",
-                    }),
+                    "status": "EVALUATION_FAILED",
+                    "breaking_change_count": 0,
                     "source_a_truncated": False,
                     "source_b_truncated": False,
                 }
-                return json.dumps(unavail_payload)
+                return json.dumps(unavail_payload, sort_keys=True)
 
             trunc_a = len(body_a) > 4000
             trunc_b = len(body_b) > 4000
@@ -181,60 +177,62 @@ class Contract(gl.Contract):
             )
 
             raw_response = gl.nondet.exec_prompt(prompt)
+            llm_res = _parse_llm_json(raw_response)
+
+            res_status = str(llm_res.get("status", "BREAKING_INCOMPATIBLE")).upper()
+            changes_raw = llm_res.get("breaking_changes", [])
+            if isinstance(changes_raw, list):
+                res_count = len([x for x in changes_raw if str(x).strip()])
+            else:
+                res_count = 0
+
+            # Deterministic discrete normalization for strict_eq consensus
+            if res_count > 0:
+                res_status = "BREAKING_INCOMPATIBLE"
+            elif res_status not in ["COMPATIBLE", "BACKWARD_COMPATIBLE_ONLY", "BREAKING_INCOMPATIBLE"]:
+                res_status = "BREAKING_INCOMPATIBLE"
 
             payload = {
-                "raw_json": raw_response,
+                "status": res_status,
+                "breaking_change_count": res_count,
                 "source_a_truncated": trunc_a,
                 "source_b_truncated": trunc_b,
             }
-            return json.dumps(payload)
+            return json.dumps(payload, sort_keys=True)
 
         exec_output_str = gl.eq_principle.strict_eq(run)
         exec_payload = _parse_llm_json(exec_output_str)
 
         source_a_truncated = bool(exec_payload.get("source_a_truncated", False))
         source_b_truncated = bool(exec_payload.get("source_b_truncated", False))
-        raw_json_str = str(exec_payload.get("raw_json", "{}"))
-
-        llm_data = _parse_llm_json(raw_json_str)
-
-        raw_status = str(llm_data.get("status", "BREAKING_INCOMPATIBLE")).upper()
-        raw_summary = str(llm_data.get("normalized_summary", "")).strip()
-
-        breaking_changes_raw = llm_data.get("breaking_changes", [])
-        if not isinstance(breaking_changes_raw, list):
-            breaking_changes_list = []
-        else:
-            breaking_changes_list = [str(x).strip() for x in breaking_changes_raw if str(x).strip()]
-
-        # Reconcile breaking change count strictly to list length
-        breaking_change_count_val = len(breaking_changes_list)
+        raw_status = str(exec_payload.get("status", "BREAKING_INCOMPATIBLE")).upper()
+        breaking_change_count_val = int(exec_payload.get("breaking_change_count", 0))
 
         # Enforce Status / Count / Change-List Invariants:
-        # Invariant 1: If evaluation failed due to gateway retrieval failure -> EVALUATION_FAILED (4)
+        # Invariant 1: Fail closed if evaluation failed due to gateway retrieval failure -> EVALUATION_FAILED (4)
         if raw_status == "EVALUATION_FAILED":
             status_code = u256(4)
             norm_status = "EVALUATION_FAILED"
             breaking_change_count_val = 0
-            normalized_summary = f"EVALUATION_FAILED: {raw_summary}"[:256]
-        # Invariant 2: If any breaking changes exist (>0), status CANNOT be COMPATIBLE or BACKWARD_COMPATIBLE_ONLY
+            normalized_summary = "EVALUATION_FAILED: Empty schema content from gateways"
+        # Invariant 2: If breaking changes exist (>0), status CANNOT be COMPATIBLE or BACKWARD_COMPATIBLE_ONLY
         elif breaking_change_count_val > 0:
             status_code = u256(3)  # BREAKING_INCOMPATIBLE
             norm_status = "BREAKING_INCOMPATIBLE"
-            normalized_summary = f"{norm_status}: {breaking_change_count_val} breaking changes. {raw_summary}"[:256]
-        # Invariant 3: Only when breaking change count is strictly 0 and list is empty
+            normalized_summary = f"BREAKING_INCOMPATIBLE: {breaking_change_count_val} breaking changes detected"
+        # Invariant 3: Only when breaking change count is strictly 0
         elif raw_status == "COMPATIBLE":
             status_code = u256(1)  # COMPATIBLE
             norm_status = "COMPATIBLE"
-            normalized_summary = f"{norm_status}: 0 breaking changes. {raw_summary}"[:256]
+            normalized_summary = "COMPATIBLE: 0 breaking changes detected"
         elif raw_status == "BACKWARD_COMPATIBLE_ONLY":
             status_code = u256(2)  # BACKWARD_COMPATIBLE_ONLY
             norm_status = "BACKWARD_COMPATIBLE_ONLY"
-            normalized_summary = f"{norm_status}: 0 breaking changes. {raw_summary}"[:256]
+            normalized_summary = "BACKWARD_COMPATIBLE_ONLY: 0 breaking changes detected"
         else:
             status_code = u256(3)  # BREAKING_INCOMPATIBLE
             norm_status = "BREAKING_INCOMPATIBLE"
-            normalized_summary = f"{norm_status}: {breaking_change_count_val} breaking changes. {raw_summary}"[:256]
+            normalized_summary = f"BREAKING_INCOMPATIBLE: {breaking_change_count_val} breaking changes detected"
 
         breaking_change_count = u256(breaking_change_count_val)
 
