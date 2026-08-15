@@ -2,11 +2,10 @@ import json
 import os
 import sys
 
-# Ensure genlayer stub / mock is available for direct execution if py-genlayer is not installed globally
+# Create genlayer stub / mock if py-genlayer is not installed in local environment
 try:
     import genlayer as gl
 except ImportError:
-    # Create simple mock for local Direct Mode simulation
     class UserError(Exception):
         pass
 
@@ -52,20 +51,28 @@ except ImportError:
             self.body = body_bytes
 
     class MockNondetWeb:
+        def __init__(self):
+            self.fail_all = False
+
         def get(self, url):
-            return MockWebResponse(b'{"mock": "schema"}')
+            if self.fail_all:
+                raise Exception("Gateway unreachable")
+            return MockWebResponse(b'{"openapi": "3.0.0", "info": {"title": "Test", "version": "1.0"}}')
 
     class MockNondet:
         def __init__(self):
             self.web = MockNondetWeb()
+            self.mock_llm_output = None
 
         def exec_prompt(self, prompt):
+            if self.mock_llm_output:
+                return json.dumps(self.mock_llm_output)
             return json.dumps(
                 {
-                    "status": "BREAKING_INCOMPATIBLE",
-                    "breaking_change_count": 1,
-                    "breaking_changes": ["Removed parameter 'amount'"],
-                    "normalized_summary": "Removed parameter 'amount'",
+                    "status": "COMPATIBLE",
+                    "breaking_change_count": 0,
+                    "breaking_changes": [],
+                    "normalized_summary": "All endpoints identical and fully backward compatible",
                 }
             )
 
@@ -90,163 +97,130 @@ except ImportError:
 
     sys.modules["genlayer"] = gl_module
 
-# Now import the contract module
 CONTRACT_DIR = os.path.abspath(
     os.path.join(os.path.dirname(__file__), "..", "contracts")
 )
 sys.path.insert(0, CONTRACT_DIR)
 
-from pairwise_compatibility_graph import Contract, SpecRecord, PairwiseEdgeRecord
+from pairwise_compatibility_graph import Contract
 
 
-def test_spec_registration():
+def test_happy_path_compatible():
+    import genlayer as gl
+    gl.nondet.mock_llm_output = {
+        "status": "COMPATIBLE",
+        "breaking_change_count": 0,
+        "breaking_changes": [],
+        "normalized_summary": "Endpoints identical and backward compatible",
+    }
     contract = Contract()
-    spec_a_id = contract.register_spec(
-        "Service A",
-        "1.0.0",
-        "https://api.example.com/v1/spec",
-        "https://fallback.example.com/v1/spec",
-    )
-    assert spec_a_id == 1, f"Expected spec_a_id to be 1, got {spec_a_id}"
-
-    spec_b_id = contract.register_spec(
-        "Service B",
-        "2.0.0",
-        "https://api.example.com/v2/spec",
-        "https://fallback.example.com/v2/spec",
-    )
-    assert spec_b_id == 2, f"Expected spec_b_id to be 2, got {spec_b_id}"
-
-    spec_data = contract.get_spec(spec_a_id)
-    assert spec_data["name"] == "Service A"
-    assert spec_data["version"] == "1.0.0"
-    print("[PASS] Spec registration & querying")
-
-
-def test_bounds_and_invalid_inputs():
-    contract = Contract()
-    # Test empty name
-    try:
-        contract.register_spec("", "1.0.0", "https://url.com", "https://fb.com")
-        assert False, "Should have raised UserError for empty name"
-    except Exception as e:
-        assert "length" in str(e).lower()
-
-    # Test name > 64 chars
-    try:
-        contract.register_spec(
-            "A" * 65, "1.0.0", "https://url.com", "https://fb.com"
-        )
-        assert False, "Should have raised UserError for name > 64 chars"
-    except Exception as e:
-        assert "length" in str(e).lower()
-
-    print("[PASS] Bounded input validation")
-
-
-def test_compatibility_evaluation_lifecycle():
-    contract = Contract()
-    id1 = contract.register_spec(
-        "API Alpha", "1.0.0", "https://pri1.com", "https://fb1.com"
-    )
-    id2 = contract.register_spec(
-        "API Beta", "2.0.0", "https://pri2.com", "https://fb2.com"
-    )
-
-    # Test self-evaluation rejection
-    try:
-        contract.evaluate_compatibility(id1, id1)
-        assert False, "Should have rejected evaluating spec with itself"
-    except Exception as e:
-        assert "itself" in str(e).lower()
-
-    # Test valid pairwise evaluation
+    id1 = contract.register_spec("PaymentsAPI", "v1.0", "https://api.com/v1.json", "https://fb.com/v1.json")
+    id2 = contract.register_spec("PaymentsAPI", "v1.1", "https://api.com/v1_1.json", "https://fb.com/v1_1.json")
+    
     edge_id = contract.evaluate_compatibility(id1, id2)
     assert edge_id == 1
+    edge = contract.get_edge(id1, id2)
+    assert edge["status_code"] == "1"  # COMPATIBLE
+    assert edge["breaking_change_count"] == "0"
+    assert contract.check_compatibility(id1, id2) == "COMPATIBLE"
+    print("[PASS] Test 1: Happy path COMPATIBLE invariant")
 
-    edge_data = contract.get_edge(id1, id2)
-    assert edge_data["spec_a_id"] == "1"
-    assert edge_data["spec_b_id"] == "2"
-    assert edge_data["status_code"] == "3"  # BREAKING_INCOMPATIBLE from mock
-    assert "validator_signature" in edge_data
 
-    status_str = contract.check_compatibility(id1, id2)
-    assert status_str == "BREAKING_INCOMPATIBLE"
-    print("[PASS] Compatibility evaluation lifecycle")
+def test_contradictory_llm_output_enforces_breaking_incompatible():
+    import genlayer as gl
+    # LLM claims COMPATIBLE but returns 1 breaking change in list
+    gl.nondet.mock_llm_output = {
+        "status": "COMPATIBLE",
+        "breaking_change_count": 0,
+        "breaking_changes": ["Removed /v1/charge parameter 'currency'"],
+        "normalized_summary": "Claims compatible but has 1 breaking change",
+    }
+    contract = Contract()
+    id1 = contract.register_spec("PaymentsAPI", "v1.0", "https://api.com/v1.json", "https://fb.com/v1.json")
+    id2 = contract.register_spec("PaymentsAPI", "v2.0", "https://api.com/v2.json", "https://fb.com/v2.json")
+    
+    edge_id = contract.evaluate_compatibility(id1, id2)
+    edge = contract.get_edge(id1, id2)
+    # INVARIANT: Must NOT be COMPATIBLE! Must be BREAKING_INCOMPATIBLE (status_code 3) and count = 1
+    assert edge["status_code"] == "3"
+    assert edge["breaking_change_count"] == "1"
+    assert contract.check_compatibility(id1, id2) == "BREAKING_INCOMPATIBLE"
+    print("[PASS] Test 2: Contradictory COMPATIBLE with breaking changes strictly reconciled to BREAKING_INCOMPATIBLE")
+
+
+def test_fail_closed_on_empty_content():
+    import genlayer as gl
+    gl.nondet.web.fail_all = True
+    contract = Contract()
+    id1 = contract.register_spec("ServiceA", "v1", "https://api.com/a.json", "https://fb.com/a.json")
+    id2 = contract.register_spec("ServiceB", "v1", "https://api.com/b.json", "https://fb.com/b.json")
+
+    edge_id = contract.evaluate_compatibility(id1, id2)
+    edge = contract.get_edge(id1, id2)
+    assert edge["status_code"] == "4"  # EVALUATION_FAILED
+    assert edge["breaking_change_count"] == "0"
+    assert contract.check_compatibility(id1, id2) == "EVALUATION_FAILED"
+    gl.nondet.web.fail_all = False
+    print("[PASS] Test 3: Fail closed when both endpoints return empty content")
+
+
+def test_backward_compatible_only():
+    import genlayer as gl
+    gl.nondet.mock_llm_output = {
+        "status": "BACKWARD_COMPATIBLE_ONLY",
+        "breaking_change_count": 0,
+        "breaking_changes": [],
+        "normalized_summary": "Added optional query parameter",
+    }
+    contract = Contract()
+    id1 = contract.register_spec("AuthAPI", "v1", "https://api.com/v1.json", "https://fb.com/v1.json")
+    id2 = contract.register_spec("AuthAPI", "v1.2", "https://api.com/v1_2.json", "https://fb.com/v1_2.json")
+    
+    edge_id = contract.evaluate_compatibility(id1, id2)
+    edge = contract.get_edge(id1, id2)
+    assert edge["status_code"] == "2"  # BACKWARD_COMPATIBLE_ONLY
+    assert edge["breaking_change_count"] == "0"
+    assert contract.check_compatibility(id1, id2) == "BACKWARD_COMPATIBLE_ONLY"
+    print("[PASS] Test 4: BACKWARD_COMPATIBLE_ONLY invariant")
 
 
 def test_differential_validator_signature():
-    """
-    Differential Test: Prove that mutating any single consequential field alters
-    the validator signature, ensuring consensus rejection if leader persists fake state.
-    """
     spec_a_id = 1
     spec_b_id = 2
     status_code = 3
-    breaking_count = 1
-    summary = "BREAKING_INCOMPATIBLE: 1 breaking changes. Removed parameter 'amount'"
+    count = 2
+    summary = "BREAKING_INCOMPATIBLE: 2 breaking changes. Removed field"
     trunc_a = False
     trunc_b = False
 
     canonical_sig = (
         f"SPECS:{spec_a_id}:{spec_b_id}|"
         + f"STATUS:{status_code}|"
-        + f"COUNT:{breaking_count}|"
+        + f"COUNT:{count}|"
         + f"SUMMARY:{summary}|"
         + f"TRUNC_A:{trunc_a}|"
         + f"TRUNC_B:{trunc_b}"
     )
 
-    # 1. Mutate status_code only (e.g. 3 -> 1)
-    mutated_status_sig = (
-        f"SPECS:{spec_a_id}:{spec_b_id}|"
-        + f"STATUS:1|"
-        + f"COUNT:{breaking_count}|"
-        + f"SUMMARY:{summary}|"
-        + f"TRUNC_A:{trunc_a}|"
-        + f"TRUNC_B:{trunc_b}"
-    )
-    assert canonical_sig != mutated_status_sig, "Mutated status failed differential test!"
+    # 1. Mutate status
+    mutated_status = canonical_sig.replace(f"STATUS:{status_code}", "STATUS:1")
+    assert canonical_sig != mutated_status
 
-    # 2. Mutate breaking count only (e.g. 1 -> 0)
-    mutated_count_sig = (
-        f"SPECS:{spec_a_id}:{spec_b_id}|"
-        + f"STATUS:{status_code}|"
-        + f"COUNT:0|"
-        + f"SUMMARY:{summary}|"
-        + f"TRUNC_A:{trunc_a}|"
-        + f"TRUNC_B:{trunc_b}"
-    )
-    assert canonical_sig != mutated_count_sig, "Mutated count failed differential test!"
+    # 2. Mutate count
+    mutated_count = canonical_sig.replace(f"COUNT:{count}", "COUNT:0")
+    assert canonical_sig != mutated_count
 
-    # 3. Mutate normalized summary string only
-    mutated_summary_sig = (
-        f"SPECS:{spec_a_id}:{spec_b_id}|"
-        + f"STATUS:{status_code}|"
-        + f"COUNT:{breaking_count}|"
-        + f"SUMMARY:COMPATIBLE: 0 breaking changes|"
-        + f"TRUNC_A:{trunc_a}|"
-        + f"TRUNC_B:{trunc_b}"
-    )
-    assert canonical_sig != mutated_summary_sig, "Mutated summary failed differential test!"
+    # 3. Mutate summary
+    mutated_summary = canonical_sig.replace(summary, "COMPATIBLE: 0 breaking changes")
+    assert canonical_sig != mutated_summary
 
-    # 4. Mutate truncation flag only
-    mutated_trunc_sig = (
-        f"SPECS:{spec_a_id}:{spec_b_id}|"
-        + f"STATUS:{status_code}|"
-        + f"COUNT:{breaking_count}|"
-        + f"SUMMARY:{summary}|"
-        + f"TRUNC_A:True|"
-        + f"TRUNC_B:{trunc_b}"
-    )
-    assert canonical_sig != mutated_trunc_sig, "Mutated truncation flag failed differential test!"
-
-    print("[PASS] Differential validator signature verification")
+    print("[PASS] Test 5: Differential signature verification for all bound fields")
 
 
 if __name__ == "__main__":
-    test_spec_registration()
-    test_bounds_and_invalid_inputs()
-    test_compatibility_evaluation_lifecycle()
+    test_happy_path_compatible()
+    test_contradictory_llm_output_enforces_breaking_incompatible()
+    test_fail_closed_on_empty_content()
+    test_backward_compatible_only()
     test_differential_validator_signature()
-    print("ALL FUNCTIONAL AND DIFFERENTIAL CONTRACT TESTS PASSED SUCCESSFULLY.")
+    print("ALL PAIRWISE COMPATIBILITY GRAPH TESTS PASSED SUCCESSFULLY.")

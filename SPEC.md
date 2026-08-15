@@ -1,66 +1,34 @@
-# Pairwise Compatibility Graph Technical Specification
+# Dynamic Pairwise Schema Compatibility Graph Specification
 
 ## Overview
 
-The Pairwise Compatibility Graph is a GenLayer Intelligent Contract primitive designed to evaluate, verify, and persist pairwise schema compatibility states between API or protocol specifications (OpenAPI, JSON-RPC, GraphQL schemas).
-
-It fetches schemas from dual independent web gateways for Spec A and Spec B, invokes LLM semantic classification via GenLayer strict consensus (`gl.eq_principle.strict_eq`), derives normalized status codes deterministically, and binds all consequential fields into an auditable validator signature on-chain.
+The `Dynamic Pairwise Schema Compatibility Graph` Intelligent Contract maintains an on-chain directed graph of API and RPC schemas. It retrieves schemas over multi-gateway HTTPS URLs, executes semantic LLM compatibility analysis under GenLayer strict consensus (`gl.eq_principle.strict_eq`), and enforces deterministic invariants between compatibility status, breaking change counts, and change lists.
 
 ---
 
-## Input Boundaries & Storage Limits
+## Invariants & Deterministic Decision Matrix
 
-- **Spec Name**: 1 to 64 ASCII characters.
-- **Spec Version**: 1 to 32 ASCII characters.
-- **Gateway URLs (Primary & Fallback)**: 1 to 512 ASCII characters.
-- **Max Schema Fetch Payload**: 4,000 UTF-8 characters per source gateway. Payload exceeding 4,000 characters triggers `source_a_truncated` or `source_b_truncated` flags.
-- **Normalized Summary String**: Bounded to 256 ASCII characters.
+1. **Fail Closed on Missing/Empty Content**:
+   - If both gateways return empty or undecodable content for either schema, the contract immediately sets `status_code = u256(4)` (`EVALUATION_FAILED`), `breaking_change_count = 0`, and records `EVALUATION_FAILED: Empty schema content from gateways`.
+2. **Reconciliation of Breaking Change Count**:
+   - `breaking_change_count = len(breaking_changes_list)`.
+3. **Strict Status / Count Invariant**:
+   - If `breaking_change_count > 0` or `len(breaking_changes_list) > 0`, status **CANNOT** be `COMPATIBLE` or `BACKWARD_COMPATIBLE_ONLY`. The contract strictly forces `status_code = u256(3)` (`BREAKING_INCOMPATIBLE`).
+   - Only when `breaking_change_count == 0` AND `len(breaking_changes_list) == 0`:
+     - `COMPATIBLE` -> `status_code = u256(1)`
+     - `BACKWARD_COMPATIBLE_ONLY` -> `status_code = u256(2)`
 
----
-
-## Storage Invariants
-
-1. `spec_count`: Strict append-only counter for registered API specs.
-2. `edge_count`: Strict append-only counter for evaluated pairwise edge records.
-3. `specs`: `TreeMap[u256, SpecRecord]` maps `spec_id` to `SpecRecord`.
-4. `edges`: `TreeMap[u256, PairwiseEdgeRecord]` maps `edge_id` to `PairwiseEdgeRecord`.
-5. `pair_to_edge`: `TreeMap[u256, u256]` maps composite pair key `(spec_a_id * 1000000 + spec_b_id)` to `edge_id`.
-6. Self-Evaluation Invariant: `spec_a_id != spec_b_id` enforced before execution.
-
----
-
-## Decision Matrix & Status Codes
-
-| Status String | Breaking Change Count | Derived `status_code` | Human Description |
-| --- | --- | --- | --- |
-| `COMPATIBLE` | `0` | `u256(1)` | Full backward and forward compatibility. |
-| `BACKWARD_COMPATIBLE_ONLY` | `>= 0` | `u256(2)` | Backward compatible only (new optional fields added). |
-| `BREAKING_INCOMPATIBLE` | `> 0` | `u256(3)` | Breaking changes detected (removed fields, altered types). |
+| Status Code | Status Name | Breaking Changes Count | Change List | Condition |
+| :--- | :--- | :--- | :--- | :--- |
+| `u256(1)` | `COMPATIBLE` | `0` | Empty | Fully bidirectional compatible |
+| `u256(2)` | `BACKWARD_COMPATIBLE_ONLY` | `0` | Empty | Spec B extends Spec A without breaking changes |
+| `u256(3)` | `BREAKING_INCOMPATIBLE` | `>= 1` | Non-empty | Contains at least 1 breaking change |
+| `u256(4)` | `EVALUATION_FAILED` | `0` | Empty | Failed to retrieve schema from gateways |
 
 ---
 
-## Validator Signature & Consensus Binding Matrix
-
-To ensure leader and validator nodes agree on exact semantic meaning rather than superficial JSON formatting, the contract builds a canonical signature string:
+## Canonical Validator Signature & Binding
 
 ```text
 SPECS:{spec_a_id}:{spec_b_id}|STATUS:{status_code}|COUNT:{breaking_change_count}|SUMMARY:{normalized_summary}|TRUNC_A:{source_a_truncated}|TRUNC_B:{source_b_truncated}
 ```
-
-### Consensus Binding Matrix
-
-| Field | Origin | Persisted? | Downstream Effect | Validator Binding | Differential Test |
-| --- | --- | --- | --- | --- | --- |
-| `status_code` | LLM + deterministic derivation | Yes | Core execution gate | Included in `validator_signature` | Mutate status -> validator rejects |
-| `breaking_change_count` | LLM + schema validator | Yes | Severity filter | Included in `validator_signature` | Mutate count -> validator rejects |
-| `normalized_summary` | LLM + text canonicalization | Yes | Auditable evidence | Included in `validator_signature` | Mutate summary text -> validator rejects |
-| `source_a_truncated` | Web fetch decoder | Yes | Data completeness flag | Included in `validator_signature` | Mutate flag -> validator rejects |
-| `source_b_truncated` | Web fetch decoder | Yes | Data completeness flag | Included in `validator_signature` | Mutate flag -> validator rejects |
-
----
-
-## Downstream Integrations
-
-Integrator dApps and cross-chain relayers query `check_compatibility(spec_a_id, spec_b_id)`:
-- Returns `"COMPATIBLE"` -> Safe to execute transaction or route message.
-- Returns `"BREAKING_INCOMPATIBLE"` -> Rejects execution and triggers error circuit breaker.
