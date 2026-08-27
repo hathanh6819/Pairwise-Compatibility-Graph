@@ -6,7 +6,6 @@ This folder holds finalized deployment artifacts and verified on-chain lifecycle
 
 - **Contract Name**: `PairwiseCompatibilityGraph`
 - **Deployed Contract Address**: [`0x0EBe00EC7127c940E0Dca43DC8e4dD5b429115A4`](https://explorer-studio.genlayer.com/address/0x0EBe00EC7127c940E0Dca43DC8e4dD5b429115A4)
-- **Creator Address**: `0x1D283b45974B0be9630DFD1deC6A62a9B72B2760`
 - **Deployment Status**: `FINALIZED` (100% SUCCESS and MAJORITY_AGREE Consensus across all transactions)
 - **Compiler Version**: `# v0.2.16`
 - **Runner Dependency**: `py-genlayer:1jb45aa8ynh2a9c9xn3b7qqh8sm5q93hwfp7jqmwsfhh8jpz09h6`

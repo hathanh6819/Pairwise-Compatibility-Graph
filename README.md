@@ -58,7 +58,6 @@ python tests/test_contract.py
 
 - **GitHub Repository**: [`https://github.com/hathanh6819/Pairwise-Compatibility-Graph`](https://github.com/hathanh6819/Pairwise-Compatibility-Graph)
 - **Deployed Contract Address**: [`0x0EBe00EC7127c940E0Dca43DC8e4dD5b429115A4`](https://explorer-studio.genlayer.com/address/0x0EBe00EC7127c940E0Dca43DC8e4dD5b429115A4)
-- **Creator Address**: `0x1D283b45974B0be9630DFD1deC6A62a9B72B2760`
 - **Deployment Status**: `FINALIZED` on GenLayer Studionet (Chain ID 61999) with full 4-transaction lifecycle history verified on GenLayer Explorer (100% SUCCESS and MAJORITY_AGREE Consensus):
   1. `deploy_contract`: [`0x0EBe00EC...`](https://explorer-studio.genlayer.com/address/0x0EBe00EC7127c940E0Dca43DC8e4dD5b429115A4) (`SUCCESS`, `Accepted`)
   2. `register_spec` (Spec A): [`0xc84990ec...`](https://explorer-studio.genlayer.com/tx/0xc84990ecf422e63ec2e511d22e88008978855e8883d161bf1deb730ad3df7150) (`SUCCESS`, `Accepted`)
