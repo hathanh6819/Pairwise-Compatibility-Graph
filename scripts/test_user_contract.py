@@ -1,8 +1,9 @@
 import time
 import genlayer_py
 import sys
+import os
 
-TARGET_CONTRACT = "0xD412ec7C0dEB52260E43590a2Cd88f06CCdCDb97"
+TARGET_CONTRACT = "0x0EBe00EC7127c940E0Dca43DC8e4dD5b429115A4"
 
 def safe_call(fn, *args, **kwargs):
     for attempt in range(10):
@@ -34,7 +35,10 @@ def main():
     target = sys.argv[1] if len(sys.argv) > 1 else TARGET_CONTRACT
     print(f"=== EXECUTING SCHEMA COMPATIBILITY GRAPH LIFECYCLE ON {target} ===")
     
-    caller_account = genlayer_py.create_account()
+    private_key = os.environ.get("PAIRWISE_TEST_PRIVATE_KEY")
+    if not private_key:
+        raise RuntimeError("PAIRWISE_TEST_PRIVATE_KEY is required")
+    caller_account = genlayer_py.create_account(private_key)
     client = genlayer_py.create_client(chain=genlayer_py.studionet, account=caller_account)
     print(f"Caller Account: {caller_account.address}")
     print("Funding caller account with 10 GEN...")
