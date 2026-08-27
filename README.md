@@ -58,6 +58,13 @@ python tests/test_contract.py
 
 - **GitHub Repository**: [`https://github.com/hathanh6819/Pairwise-Compatibility-Graph`](https://github.com/hathanh6819/Pairwise-Compatibility-Graph)
 - **Deployed Contract Address**: [`0x0EBe00EC7127c940E0Dca43DC8e4dD5b429115A4`](https://explorer-studio.genlayer.com/address/0x0EBe00EC7127c940E0Dca43DC8e4dD5b429115A4)
+
+### Breaking-schema evidence (Pinata)
+
+- Spec A: `https://gateway.pinata.cloud/ipfs/QmXCFAxQsJXjfrR1XkNp1qyPmqWXLCh2w28Zg2MnFHhXaq`
+- Spec B: `https://gateway.pinata.cloud/ipfs/Qmb5R3GejRU2mr4ZAiLrF3s6gDVG3HCKG7S34tC8WupDbk`
+- Evaluation `(7, 8)`: [`0x599d7a2f49afaae9d983d07515693b355951895183a32e5caa675afaf27d14b4`](https://explorer-studio.genlayer.com/tx/0x599d7a2f49afaae9d983d07515693b355951895183a32e5caa675afaf27d14b4)
+- Final readback: `BREAKING_INCOMPATIBLE`, status code `3`, `breaking_change_count = 2`, `FINALIZED`, `MAJORITY_AGREE`.
 - **Deployment Status**: `FINALIZED` on GenLayer Studionet (Chain ID 61999) with full 4-transaction lifecycle history verified on GenLayer Explorer (100% SUCCESS and MAJORITY_AGREE Consensus):
   1. `deploy_contract`: [`0x0EBe00EC...`](https://explorer-studio.genlayer.com/address/0x0EBe00EC7127c940E0Dca43DC8e4dD5b429115A4) (`SUCCESS`, `Accepted`)
   2. `register_spec` (Spec A): [`0xc84990ec...`](https://explorer-studio.genlayer.com/tx/0xc84990ecf422e63ec2e511d22e88008978855e8883d161bf1deb730ad3df7150) (`SUCCESS`, `Accepted`)

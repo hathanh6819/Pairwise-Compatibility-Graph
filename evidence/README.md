@@ -23,4 +23,13 @@ This folder holds finalized deployment artifacts and verified on-chain lifecycle
 
 ## Evidence Files
 
+## Breaking-schema Evidence (Pinata)
+
+- Spec A gateway: `https://gateway.pinata.cloud/ipfs/QmXCFAxQsJXjfrR1XkNp1qyPmqWXLCh2w28Zg2MnFHhXaq`
+- Spec B gateway: `https://gateway.pinata.cloud/ipfs/Qmb5R3GejRU2mr4ZAiLrF3s6gDVG3HCKG7S34tC8WupDbk`
+- `register_spec` A: [`0xb6e33c8e22ac37881736f2fa878aef63e2c89b5d63c743c49bafed4c0a03feec`](https://explorer-studio.genlayer.com/tx/0xb6e33c8e22ac37881736f2fa878aef63e2c89b5d63c743c49bafed4c0a03feec)
+- `register_spec` B: [`0xc64ea592c8e0f6fd5c6618f8d419e307f070135b689010b26af49417c1b2a2fb`](https://explorer-studio.genlayer.com/tx/0xc64ea592c8e0f6fd5c6618f8d419e307f070135b689010b26af49417c1b2a2fb)
+- `evaluate_compatibility(7, 8)`: [`0x599d7a2f49afaae9d983d07515693b355951895183a32e5caa675afaf27d14b4`](https://explorer-studio.genlayer.com/tx/0x599d7a2f49afaae9d983d07515693b355951895183a32e5caa675afaf27d14b4)
+- Final readback: `BREAKING_INCOMPATIBLE`, status code `3`, `breaking_change_count = 2`, `FINALIZED`, `MAJORITY_AGREE`.
+
 - [`deployed_address.txt`](file:///d:/Genlayer%20Dino/pairwise-compatibility-graph/evidence/deployed_address.txt): Raw deployed contract address.
