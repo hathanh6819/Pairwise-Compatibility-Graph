@@ -179,7 +179,9 @@ class Contract(gl.Contract):
             raw_response = gl.nondet.exec_prompt(prompt)
             llm_res = _parse_llm_json(raw_response)
 
-            res_status = str(llm_res.get("status", "BREAKING_INCOMPATIBLE")).upper()
+            # An absent/unknown status is an evaluation failure. Never invent a
+            # breaking verdict when the model did not provide supporting changes.
+            res_status = str(llm_res.get("status", "EVALUATION_FAILED")).upper()
             changes_raw = llm_res.get("breaking_changes", [])
             if isinstance(changes_raw, list):
                 res_count = len([x for x in changes_raw if str(x).strip()])
@@ -189,8 +191,10 @@ class Contract(gl.Contract):
             # Deterministic discrete normalization for strict_eq consensus
             if res_count > 0:
                 res_status = "BREAKING_INCOMPATIBLE"
-            elif res_status not in ["COMPATIBLE", "BACKWARD_COMPATIBLE_ONLY", "BREAKING_INCOMPATIBLE"]:
-                res_status = "BREAKING_INCOMPATIBLE"
+            elif res_status == "BREAKING_INCOMPATIBLE":
+                res_status = "EVALUATION_FAILED"
+            elif res_status not in ["COMPATIBLE", "BACKWARD_COMPATIBLE_ONLY"]:
+                res_status = "EVALUATION_FAILED"
 
             payload = {
                 "status": res_status,
@@ -205,7 +209,7 @@ class Contract(gl.Contract):
 
         source_a_truncated = bool(exec_payload.get("source_a_truncated", False))
         source_b_truncated = bool(exec_payload.get("source_b_truncated", False))
-        raw_status = str(exec_payload.get("status", "BREAKING_INCOMPATIBLE")).upper()
+        raw_status = str(exec_payload.get("status", "EVALUATION_FAILED")).upper()
         breaking_change_count_val = int(exec_payload.get("breaking_change_count", 0))
 
         # Enforce Status / Count / Change-List Invariants:
@@ -214,7 +218,7 @@ class Contract(gl.Contract):
             status_code = u256(4)
             norm_status = "EVALUATION_FAILED"
             breaking_change_count_val = 0
-            normalized_summary = "EVALUATION_FAILED: Empty schema content from gateways"
+            normalized_summary = "EVALUATION_FAILED: unavailable, malformed, or internally inconsistent evidence"
         # Invariant 2: If breaking changes exist (>0), status CANNOT be COMPATIBLE or BACKWARD_COMPATIBLE_ONLY
         elif breaking_change_count_val > 0:
             status_code = u256(3)  # BREAKING_INCOMPATIBLE
@@ -230,9 +234,17 @@ class Contract(gl.Contract):
             norm_status = "BACKWARD_COMPATIBLE_ONLY"
             normalized_summary = "BACKWARD_COMPATIBLE_ONLY: 0 breaking changes detected"
         else:
-            status_code = u256(3)  # BREAKING_INCOMPATIBLE
-            norm_status = "BREAKING_INCOMPATIBLE"
-            normalized_summary = f"BREAKING_INCOMPATIBLE: {breaking_change_count_val} breaking changes detected"
+            status_code = u256(4)
+            norm_status = "EVALUATION_FAILED"
+            breaking_change_count_val = 0
+            normalized_summary = "EVALUATION_FAILED: unsupported status/count combination"
+
+        # Storage-boundary invariant: status 3 is impossible with count zero.
+        if status_code == u256(3) and breaking_change_count_val < 1:
+            status_code = u256(4)
+            norm_status = "EVALUATION_FAILED"
+            breaking_change_count_val = 0
+            normalized_summary = "EVALUATION_FAILED: breaking verdict requires at least one listed change"
 
         breaking_change_count = u256(breaking_change_count_val)
 

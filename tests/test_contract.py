@@ -186,18 +186,36 @@ def test_backward_compatible_only():
 
 def test_malformed_or_explicit_breaking_without_changes_fails_closed():
     import genlayer as gl
-    # A validator may return a malformed payload or BREAKING_INCOMPATIBLE with
-    # an empty change list. Both must remain explicitly breaking, never ZERO.
+    # A malformed payload has no evidence for a substantive verdict.
     gl.nondet.mock_llm_output = "not valid json"
     contract = Contract()
     id1 = contract.register_spec("OrdersAPI", "v1", "https://api.com/o1.json", "https://fb.com/o1.json")
     id2 = contract.register_spec("OrdersAPI", "v2", "https://api.com/o2.json", "https://fb.com/o2.json")
     contract.evaluate_compatibility(id1, id2)
     edge = contract.get_edge(id1, id2)
-    assert edge["status_code"] == "3"
+    assert edge["status_code"] == "4"
     assert edge["breaking_change_count"] == "0"
-    assert contract.check_compatibility(id1, id2) == "BREAKING_INCOMPATIBLE"
-    print("[PASS] Test 5: Malformed/empty-change response fails closed as BREAKING_INCOMPATIBLE")
+    assert contract.check_compatibility(id1, id2) == "EVALUATION_FAILED"
+    print("[PASS] Test 5: Malformed response maps to EVALUATION_FAILED")
+
+
+def test_explicit_breaking_without_listed_changes_is_evaluation_failed():
+    import genlayer as gl
+    gl.nondet.mock_llm_output = {
+        "status": "BREAKING_INCOMPATIBLE",
+        "breaking_change_count": 0,
+        "breaking_changes": [],
+        "normalized_summary": "Breaking but no supporting change",
+    }
+    contract = Contract()
+    id1 = contract.register_spec("LedgerAPI", "v1", "https://api.com/l1.json", "https://fb.com/l1.json")
+    id2 = contract.register_spec("LedgerAPI", "v2", "https://api.com/l2.json", "https://fb.com/l2.json")
+    contract.evaluate_compatibility(id1, id2)
+    edge = contract.get_edge(id1, id2)
+    assert edge["status_code"] == "4"
+    assert edge["breaking_change_count"] == "0"
+    assert contract.check_compatibility(id1, id2) == "EVALUATION_FAILED"
+    print("[PASS] Test 6: Empty breaking verdict maps to EVALUATION_FAILED")
 
 
 def test_differential_validator_signature():

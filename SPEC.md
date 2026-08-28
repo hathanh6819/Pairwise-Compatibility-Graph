@@ -23,6 +23,11 @@ The `Dynamic Pairwise Schema Compatibility Graph` Intelligent Contract maintains
 | `u256(1)` | `COMPATIBLE` | `0` | Empty | Fully bidirectional compatible |
 | `u256(2)` | `BACKWARD_COMPATIBLE_ONLY` | `0` | Empty | Spec B extends Spec A without breaking changes |
 | `u256(3)` | `BREAKING_INCOMPATIBLE` | `>= 1` | Non-empty | Contains at least 1 breaking change |
+| `u256(4)` | `EVALUATION_FAILED` | `0` | Empty | Unavailable, malformed, unsupported, or inconsistent evaluation |
+
+`BREAKING_INCOMPATIBLE` with no listed change is never persisted. Malformed model
+output and every unsupported status/count combination are normalized to
+`EVALUATION_FAILED` before the edge is written.
 | `u256(4)` | `EVALUATION_FAILED` | `0` | Empty | Failed to retrieve schema from gateways |
 
 ---

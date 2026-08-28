@@ -37,8 +37,9 @@ Modern decentralized architectures rely on APIs and RPC interfaces that evolve c
 - **Status / Count / Change-List Invariant**:
   - `breaking_change_count` is strictly derived as `len(breaking_changes_list)`.
   - If `count > 0`, status MUST be `BREAKING_INCOMPATIBLE` (3).
+  - `BREAKING_INCOMPATIBLE` (3) is valid ONLY when `count >= 1`; an empty breaking verdict is normalized to `EVALUATION_FAILED` (4).
   - Status `COMPATIBLE` (1) and `BACKWARD_COMPATIBLE_ONLY` (2) are allowed ONLY when `count == 0` and `breaking_changes` is empty.
-  - If either spec schema returns empty content from all gateways, the contract fails closed into `EVALUATION_FAILED` (4).
+  - Empty source content, malformed output, unknown statuses, and inconsistent status/count combinations all normalize to `EVALUATION_FAILED` (4) before storage.
 
 ---
 
